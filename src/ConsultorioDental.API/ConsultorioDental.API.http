@@ -1,0 +1,145 @@
+@host = http://localhost:5080
+
+### 1. Iniciar sesión y obtener el JWT
+# @name login
+POST {{host}}/api/auth/login
+Content-Type: application/json
+
+{
+  "nombreUsuario": "admin",
+  "password": "Admin123*"
+}
+
+### Token capturado de la respuesta anterior
+@token = {{login.response.body.datos.token}}
+
+### 2. Perfil del usuario autenticado
+GET {{host}}/api/auth/perfil
+Authorization: Bearer {{token}}
+
+### 3. Listado de citas con estado y tiempo restante calculados
+GET {{host}}/api/citas
+Authorization: Bearer {{token}}
+
+### 4. Citas filtradas por estado
+GET {{host}}/api/citas?estado=Vigente
+Authorization: Bearer {{token}}
+
+### 5. Resumen de la agenda
+GET {{host}}/api/citas/resumen
+Authorization: Bearer {{token}}
+
+### 6. Registrar un paciente
+POST {{host}}/api/pacientes
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "nombre": "Pedro",
+  "apellido": "Martínez",
+  "documento": "402-1112223-4",
+  "fechaNacimiento": "1995-06-15",
+  "telefono": "809-555-7788",
+  "correo": "pedro@correo.com",
+  "direccion": "Calle El Sol 20, Santiago"
+}
+
+### 7. Agendar una cita (duracionMinutos en 0 toma la duración del servicio)
+POST {{host}}/api/citas
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "pacienteId": 1,
+  "fecha": "2026-08-10",
+  "hora": "10:00:00",
+  "duracionMinutos": 0,
+  "dentistaId": 1,
+  "motivoId": 1,
+  "servicioId": 2,
+  "consultorioId": 1,
+  "notas": "Primera limpieza del año"
+}
+
+### 8. Reprogramar la cita 1
+PUT {{host}}/api/citas/1
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "pacienteId": 1,
+  "fecha": "2026-08-10",
+  "hora": "16:00:00",
+  "duracionMinutos": 40,
+  "dentistaId": 1,
+  "motivoId": 2,
+  "servicioId": 3,
+  "consultorioId": 2
+}
+
+### 9. Cancelar una cita
+PATCH {{host}}/api/citas/1/cancelar
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "motivoCancelacion": "El paciente solicitó reprogramar más adelante."
+}
+
+### 10. Eliminar una cita que aún no ha iniciado
+DELETE {{host}}/api/citas/1
+Authorization: Bearer {{token}}
+
+### 11. Disponibilidad de un dentista en una fecha
+GET {{host}}/api/dentistas/1/disponibilidad?fecha=2026-08-10
+Authorization: Bearer {{token}}
+
+### 12. Registrar un dentista
+POST {{host}}/api/dentistas
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "nombre": "Pedro",
+  "apellido": "Suárez",
+  "numeroLicencia": "EXQ-40122",
+  "correo": "pedro.suarez@consultoriodental.com",
+  "telefono": "809-555-0104",
+  "especialidadId": 4
+}
+
+### 13. Registrar un horario de dentista (0 = Domingo ... 6 = Sábado)
+POST {{host}}/api/horarios-dentista
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "dentistaId": 1,
+  "diaSemana": 0,
+  "horaInicio": "09:00:00",
+  "horaFin": "13:00:00",
+  "observacion": "Guardia dominical"
+}
+
+### 14. Crear un usuario (solo administradores)
+POST {{host}}/api/usuarios
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "nombreUsuario": "recepcion",
+  "nombreCompleto": "Recepción Consultorio",
+  "correo": "recepcion@consultoriodental.com",
+  "password": "Recep123*",
+  "rol": "Recepcionista"
+}
+
+### 15. Cambiar la contraseña del usuario autenticado
+POST {{host}}/api/usuarios/cambiar-password
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "passwordActual": "Admin123*",
+  "passwordNuevo": "NuevaClave123*"
+}

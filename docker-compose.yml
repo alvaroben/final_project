@@ -1,0 +1,17 @@
+services:
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: sql-dental
+    # En Mac con chip Apple (arm64) la imagen corre emulada; en Windows/Linux x64 puede quitarse.
+    platform: linux/amd64
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: "Dental*2026Pass"
+      MSSQL_PID: "Developer"
+    ports:
+      - "1433:1433"
+    volumes:
+      - datos-sql:/var/opt/mssql
+
+volumes:
+  datos-sql:
