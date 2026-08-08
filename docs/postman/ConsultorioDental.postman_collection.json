@@ -1,0 +1,3311 @@
+{
+  "info": {
+    "_postman_id": "a7f3c1e0-4d2b-4b8a-9c15-6e0f2b7d9a31",
+    "name": "API Consultorio Dental — Evidencias INF-4318",
+    "description": "# Evidencias de funcionamiento — Proyecto final INF-4318\n\nColección lista para capturar. Cada petición trae el cuerpo ya escrito, el estado esperado\ny, en su descripción, la frase de \"qué evidencia\" para el pie de figura del informe.\n\n## Antes de empezar\n\n1. Levante la API con una base de datos limpia:\n   `docker compose down -v && docker compose up -d` y luego\n   `dotnet run --project src/ConsultorioDental.API`\n2. Importe también `ConsultorioDental.postman_environment.json` y **selecciónelo**\n   en el desplegable de la esquina superior derecha.\n3. `View → Layout → Two-pane view`: deja petición y respuesta en la misma imagen.\n4. Ejecute **A01** primero: guarda el token que heredan todas las demás peticiones.\n\n## Orden de ejecución\n\n```\nA01 … A05  →  C01  →  A06a, A06b  →  B (todas)  →  C02 … C09\n   →  D (todas)  →  F (todas)  →  E (todas, al final)\n```\n\nLos scripts guardan solos los IDs creados (paciente → cita → PUT → DELETE), así que\nno hay que copiar ningún número a mano. `{{fechaCita}}` se recalcula al próximo lunes\nen cada envío.\n\n## Cómo capturar\n\nCada imagen debe mostrar: método y URL · el Body o los Params · el **código de estado** ·\nel tiempo de respuesta · el JSON devuelto. Nombre los archivos con el código de la\npetición: `A01-login.png`, `C09-agendar-cita.png`, `F10-solapamiento-409.png`.\n\nEl detalle de cada captura está en `docs/GUIA_CAPTURAS_POSTMAN_COMPLETA.md`.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Fija {{fechaCita}} al próximo lunes, para que las citas siempre caigan",
+          "// en el futuro y dentro del horario de los dentistas (lunes a sábado).",
+          "const hoy = new Date();",
+          "const dias = (8 - hoy.getDay()) % 7 || 7;",
+          "const lunes = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate() + dias);",
+          "const dosDigitos = (n) => String(n).padStart(2, \"0\");",
+          "const iso = `${lunes.getFullYear()}-${dosDigitos(lunes.getMonth() + 1)}-${dosDigitos(lunes.getDate())}`;",
+          "pm.environment.set(\"fechaCita\", iso);"
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "1 · A — Autenticación",
+      "description": "Login, perfil y los tres rechazos de seguridad.\n\nA06a y A06b requieren que **C01** ya se haya ejecutado (crea el usuario recepcionista).",
+      "item": [
+        {
+          "name": "A01 · Login (admin) → 200",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"A01 responde 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "if (pm.response.code === 200) {",
+                  "    pm.environment.set(\"token\", pm.response.json().datos.token);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Credenciales validadas contra hash BCrypt y emisión del JWT. La respuesta trae token, tipoToken, expiraEn y el usuario SIN contraseña. El token queda guardado en la variable {{token}}.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombreUsuario\": \"admin\",\n  \"password\": \"Admin123*\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "A02 · Perfil del usuario autenticado → 200",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"A02 responde 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/perfil",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "perfil"
+              ]
+            },
+            "description": "El id del usuario se lee del claim del token, no de la URL. Capture también la pestaña Authorization."
+          },
+          "response": []
+        },
+        {
+          "name": "A03 · Credenciales incorrectas → 401",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"A03 responde 401\", function () {",
+                  "    pm.response.to.have.status(401);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "\"Usuario o contraseña incorrectos.\" — el mismo mensaje que si el usuario no existiera, para no revelar cuál de los dos falló.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombreUsuario\": \"admin\",\n  \"password\": \"ClaveIncorrecta1\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "A04 · Petición sin token → 401",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"A04 responde 401\", function () {",
+                  "    pm.response.to.have.status(401);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/citas",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "citas"
+              ]
+            },
+            "description": "\"Debe iniciar sesión y enviar el token JWT en el encabezado Authorization.\" El error mantiene el mismo contrato JSON que las respuestas exitosas.",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "A05 · Token inválido o expirado → 401",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"A05 responde 401\", function () {",
+                  "    pm.response.to.have.status(401);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/citas",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "citas"
+              ]
+            },
+            "description": "\"El token enviado no es válido o ya expiró.\" Capture la pestaña Authorization con el token falso a la vista.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "abc.123.xyz",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "A06a · Login recepcionista (requiere C01) → 200",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"A06a responde 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "if (pm.response.code === 200) {",
+                  "    pm.environment.set(\"tokenRecepcion\", pm.response.json().datos.token);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Paso previo a A06b: obtiene un token de un usuario SIN rol de administrador y lo guarda en {{tokenRecepcion}}. No requiere captura.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombreUsuario\": \"recepcion.demo\",\n  \"password\": \"Recepcion123*\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "A06b · Rol sin permiso → 403",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"A06b responde 403\", function () {",
+                  "    pm.response.to.have.status(403);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/usuarios",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "usuarios"
+              ]
+            },
+            "description": "\"Su rol no tiene permiso para ejecutar esta operación.\" El token es válido: no es un 401. Es la diferencia entre autenticación y autorización.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tokenRecepcion}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombreUsuario\": \"prueba.rol\",\n  \"nombreCompleto\": \"Usuario Prueba de Rol\",\n  \"correo\": \"prueba.rol@consultoriodental.com\",\n  \"password\": \"Prueba123*\",\n  \"rol\": \"Recepcionista\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "2 · B — Consultas",
+      "description": "Los 24 GET de la API. Ninguno modifica datos, se pueden repetir sin consecuencias.",
+      "item": [
+        {
+          "name": "B01 · GET /api/usuarios → 200",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"B01 responde 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/usuarios",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "usuarios"
+              ]
+            },
+            "description": "Listado completo de usuarios. Ningún passwordHash aparece en la salida."
+          },
+          "response": []
+        },
+        {
+          "name": "B02 · GET /api/usuarios/1 → 200",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"B02 responde 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/usuarios/1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "usuarios",
+                "1"
+              ]
+            },
+            "description": "Consulta por ID con rolNombre y ultimoAcceso."
+          },
+          "response": []
+        },
+        {
+          "name": "B03 · GET /api/usuarios (filtros) → 200",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"B03 responde 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/usuarios?activo=true&busqueda=admin",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "usuarios"
+              ],
+              "query": [
+                {
+                  "key": "activo",
+                  "value": "true"
+                },
+                {
+                  "key": "busqueda",
+                  "value": "admin"
+                }
+              ]
+            },
+            "description": "Filtro por estado y búsqueda parcial por usuario, nombre o correo. Capture la pestaña Params."
+          },
+          "response": []
+        },
+        {
+          "name": "B04 · GET /api/pacientes → 200",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"B04 responde 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/pacientes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "pacientes"
+              ]
+            },
+            "description": "Listado ordenado por apellido, con edad y totalCitas calculados por la API."
+          },
+          "response": []
+        },
+        {
+          "name": "B05 · GET /api/pacientes/1 → 200",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"B05 responde 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/pacientes/1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "pacientes",
+                "1"
+              ]
+            },
+            "description": "nombreCompleto y edad son derivados, no están almacenados en la base de datos."
+          },
+          "response": []
+        },
+        {
+          "name": "B06 · GET /api/pacientes (búsqueda) → 200",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"B06 responde 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/pacientes?busqueda=001-1234567-8",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "pacientes"
+              ],
+              "query": [
+                {
+                  "key": "busqueda",
+                  "value": "001-1234567-8"
+                }
+              ]
+            },
+            "description": "Búsqueda por documento; también funciona por nombre o apellido."
+          },
+          "response": []
+        },
+        {
+          "name": "B07 · GET /api/dentistas → 200",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"B07 responde 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/dentistas",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dentistas"
+              ]
+            },
+            "description": "Cada dentista con su especialidad resuelta y sus 11 bloques de horario anidados."
+          },
+          "response": []
+        },
+        {
+          "name": "B08 · GET /api/dentistas/1 → 200",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"B08 responde 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/dentistas/1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dentistas",
+                "1"
+              ]
+            },
+            "description": "Consulta por ID."
+          },
+          "response": []
+        },
+        {
+          "name": "B09 · GET /api/dentistas (filtros) → 200",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"B09 responde 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/dentistas?activo=true&especialidadId=2",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dentistas"
+              ],
+              "query": [
+                {
+                  "key": "activo",
+                  "value": "true"
+                },
+                {
+                  "key": "especialidadId",
+                  "value": "2"
+                }
+              ]
+            },
+            "description": "Filtro combinado: devuelve solo al dentista de Ortodoncia."
+          },
+          "response": []
+        },
+        {
+          "name": "B10 · GET /api/dentistas/1/disponibilidad → 200",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"B10 responde 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/dentistas/1/disponibilidad?fecha={{fechaCita}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dentistas",
+                "1",
+                "disponibilidad"
+              ],
+              "query": [
+                {
+                  "key": "fecha",
+                  "value": "{{fechaCita}}"
+                }
+              ]
+            },
+            "description": "Endpoint calculado: bloques de trabajo del día, citas ya agendadas y minutos ocupados."
+          },
+          "response": []
+        },
+        {
+          "name": "B11 · GET /api/especialidades → 200",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"B11 responde 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/especialidades",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "especialidades"
+              ]
+            },
+            "description": "Catálogo con totalDentistas por especialidad."
+          },
+          "response": []
+        },
+        {
+          "name": "B12 · GET /api/especialidades/1 → 200",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"B12 responde 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/especialidades/1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "especialidades",
+                "1"
+              ]
+            },
+            "description": "Consulta por ID."
+          },
+          "response": []
+        },
+        {
+          "name": "B13 · GET /api/motivos → 200",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"B13 responde 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/motivos",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "motivos"
+              ]
+            },
+            "description": "Catálogo ordenado por prioridad, con prioridadNombre (Baja/Media/Alta)."
+          },
+          "response": []
+        },
+        {
+          "name": "B14 · GET /api/motivos/1 → 200",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"B14 responde 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/motivos/1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "motivos",
+                "1"
+              ]
+            },
+            "description": "Consulta por ID."
+          },
+          "response": []
+        },
+        {
+          "name": "B15 · GET /api/servicios → 200",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"B15 responde 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/servicios",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "servicios"
+              ]
+            },
+            "description": "Catálogo con precio y duración sugerida de cada servicio."
+          },
+          "response": []
+        },
+        {
+          "name": "B16 · GET /api/servicios/1 → 200",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"B16 responde 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/servicios/1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "servicios",
+                "1"
+              ]
+            },
+            "description": "Consulta por ID."
+          },
+          "response": []
+        },
+        {
+          "name": "B17 · GET /api/consultorios → 200",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"B17 responde 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/consultorios",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "consultorios"
+              ]
+            },
+            "description": "Catálogo de salas con totalCitas."
+          },
+          "response": []
+        },
+        {
+          "name": "B18 · GET /api/consultorios/1 → 200",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"B18 responde 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/consultorios/1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "consultorios",
+                "1"
+              ]
+            },
+            "description": "Consulta por ID."
+          },
+          "response": []
+        },
+        {
+          "name": "B19 · GET /api/horarios-dentista → 200",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"B19 responde 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/horarios-dentista?dentistaId=1&diaSemana=1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "horarios-dentista"
+              ],
+              "query": [
+                {
+                  "key": "dentistaId",
+                  "value": "1"
+                },
+                {
+                  "key": "diaSemana",
+                  "value": "1"
+                }
+              ]
+            },
+            "description": "Horarios del lunes del dentista 1, con diaSemanaNombre y minutosDisponibles calculados."
+          },
+          "response": []
+        },
+        {
+          "name": "B20 · GET /api/horarios-dentista/1 → 200",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"B20 responde 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/horarios-dentista/1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "horarios-dentista",
+                "1"
+              ]
+            },
+            "description": "Consulta por ID."
+          },
+          "response": []
+        },
+        {
+          "name": "B21 · GET /api/citas → 200",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"B21 responde 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/citas",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "citas"
+              ]
+            },
+            "description": "ENTIDAD PRINCIPAL. Cada cita trae estado, estadoNombre, tiempoRestante (días/horas/minutos + descripción) y costoEstimado: todos calculados por la API, ninguno almacenado."
+          },
+          "response": []
+        },
+        {
+          "name": "B22 · GET /api/citas/3 → 200",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"B22 responde 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/citas/3",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "citas",
+                "3"
+              ]
+            },
+            "description": "Cita vigente: tiempoRestante.descripcion legible (\"Faltan X días, Y horas...\")."
+          },
+          "response": []
+        },
+        {
+          "name": "B23 · GET /api/citas (filtros) → 200",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"B23 responde 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/citas?estado=Vigente&dentistaId=3&fechaDesde=2026-01-01&fechaHasta=2026-12-31",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "citas"
+              ],
+              "query": [
+                {
+                  "key": "estado",
+                  "value": "Vigente"
+                },
+                {
+                  "key": "dentistaId",
+                  "value": "3"
+                },
+                {
+                  "key": "fechaDesde",
+                  "value": "2026-01-01"
+                },
+                {
+                  "key": "fechaHasta",
+                  "value": "2026-12-31"
+                }
+              ]
+            },
+            "description": "Filtro múltiple, incluido el estado CALCULADO (no existe como columna en la base de datos)."
+          },
+          "response": []
+        },
+        {
+          "name": "B24 · GET /api/citas/resumen → 200",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"B24 responde 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/citas/resumen",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "citas",
+                "resumen"
+              ]
+            },
+            "description": "Agregación: totales por estado, citas de hoy e ingreso estimado pendiente."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "3 · C — Registros",
+      "description": "Los 9 POST de creación. Todos devuelven 201 Created con el encabezado Location.\n\nLos scripts guardan cada id creado en una variable de entorno; ejecútelos en orden.",
+      "item": [
+        {
+          "name": "C01 · POST /api/usuarios → 201",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"C01 responde 201\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "if (pm.response.code < 300) {",
+                  "    pm.environment.set(\"usuarioDemoId\", pm.response.json().datos.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/usuarios",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "usuarios"
+              ]
+            },
+            "description": "La contraseña entra en texto plano y NO vuelve en la respuesta: se guarda como hash BCrypt. Este usuario es el que usa A06 para el 403.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombreUsuario\": \"recepcion.demo\",\n  \"nombreCompleto\": \"Recepcionista de Demostración\",\n  \"correo\": \"recepcion.demo@consultoriodental.com\",\n  \"password\": \"Recepcion123*\",\n  \"rol\": \"Recepcionista\",\n  \"activo\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "C02 · POST /api/pacientes → 201",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"C02 responde 201\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "if (pm.response.code < 300) {",
+                  "    pm.environment.set(\"pacienteDemoId\", pm.response.json().datos.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/pacientes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "pacientes"
+              ]
+            },
+            "description": "Estado 201 (no 200) y edad calculada por la API a partir de la fecha de nacimiento. Revise el encabezado Location de la respuesta.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Pedro\",\n  \"apellido\": \"Martínez\",\n  \"documento\": \"402-1111111-1\",\n  \"fechaNacimiento\": \"1992-04-18\",\n  \"telefono\": \"809-555-7788\",\n  \"correo\": \"pedro.martinez@correo.com\",\n  \"direccion\": \"Calle El Sol 22, Santo Domingo\",\n  \"alergias\": \"Ninguna conocida\",\n  \"activo\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "C03 · POST /api/especialidades → 201",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"C03 responde 201\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "if (pm.response.code < 300) {",
+                  "    pm.environment.set(\"especialidadDemoId\", pm.response.json().datos.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/especialidades",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "especialidades"
+              ]
+            },
+            "description": "Alta en catálogo con validación de nombre único.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Odontología Estética\",\n  \"descripcion\": \"Blanqueamiento, carillas y armonía de la sonrisa.\",\n  \"activa\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "C04 · POST /api/dentistas → 201",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"C04 responde 201\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "if (pm.response.code < 300) {",
+                  "    pm.environment.set(\"dentistaDemoId\", pm.response.json().datos.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/dentistas",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dentistas"
+              ]
+            },
+            "description": "La API resuelve la relación y devuelve especialidadNombre. Nace sin horarios (horarios: []), lo que enlaza con C05.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Gabriel\",\n  \"apellido\": \"Núñez\",\n  \"numeroLicencia\": \"EXQ-40777\",\n  \"correo\": \"gabriel.nunez@consultoriodental.com\",\n  \"telefono\": \"809-555-0104\",\n  \"especialidadId\": \"{{especialidadDemoId}}\",\n  \"activo\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "C05 · POST /api/horarios-dentista → 201",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"C05 responde 201\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "if (pm.response.code < 300) {",
+                  "    pm.environment.set(\"horarioDemoId\", pm.response.json().datos.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/horarios-dentista",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "horarios-dentista"
+              ]
+            },
+            "description": "diaSemana 2 se devuelve como \"Martes\" y la API calcula minutosDisponibles: 240.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"dentistaId\": \"{{dentistaDemoId}}\",\n  \"diaSemana\": 2,\n  \"horaInicio\": \"09:00:00\",\n  \"horaFin\": \"13:00:00\",\n  \"observacion\": \"Jornada de martes\",\n  \"activo\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "C06 · POST /api/motivos → 201",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"C06 responde 201\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "if (pm.response.code < 300) {",
+                  "    pm.environment.set(\"motivoDemoId\", pm.response.json().datos.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/motivos",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "motivos"
+              ]
+            },
+            "description": "prioridad 1 se devuelve como prioridadNombre \"Baja\".",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Blanqueamiento dental\",\n  \"descripcion\": \"Solicitud de aclaramiento del color dental.\",\n  \"prioridad\": 1,\n  \"activo\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "C07 · POST /api/servicios → 201",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"C07 responde 201\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "if (pm.response.code < 300) {",
+                  "    pm.environment.set(\"servicioDemoId\", pm.response.json().datos.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/servicios",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "servicios"
+              ]
+            },
+            "description": "Alta de servicio con precio y duración sugerida, que luego alimenta el cálculo de las citas.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Blanqueamiento en consultorio\",\n  \"descripcion\": \"Sesión de blanqueamiento con lámpara LED.\",\n  \"precio\": 7500,\n  \"duracionMinutos\": 60,\n  \"activo\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "C08 · POST /api/consultorios → 201",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"C08 responde 201\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "if (pm.response.code < 300) {",
+                  "    pm.environment.set(\"consultorioDemoId\", pm.response.json().datos.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/consultorios",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "consultorios"
+              ]
+            },
+            "description": "Alta de sala con código único.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"codigo\": \"C-04\",\n  \"nombre\": \"Consultorio 4\",\n  \"ubicacion\": \"Segundo nivel, ala este\",\n  \"capacidad\": 1,\n  \"activo\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "C09 · POST /api/citas → 201",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"C09 responde 201\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "if (pm.response.code < 300) {",
+                  "    pm.environment.set(\"citaDemoId\", pm.response.json().datos.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/citas",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "citas"
+              ]
+            },
+            "description": "LA CAPTURA MÁS IMPORTANTE. El cuerpo NO incluye estado, costo ni duración, y la respuesta trae: duracionMinutos 45 (tomada del servicio porque se envió 0), costoEstimado 2500.00 (precio congelado al agendar), estado \"Vigente\" y tiempoRestante. Antes de aceptarla la API verificó que las cinco entidades existan y estén activas, que la fecha sea futura, que la hora caiga en el horario del dentista y que no haya solapamiento.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"pacienteId\": {{pacienteDemoId}},\n  \"fecha\": \"{{fechaCita}}\",\n  \"hora\": \"10:00:00\",\n  \"duracionMinutos\": 0,\n  \"dentistaId\": 1,\n  \"motivoId\": 2,\n  \"servicioId\": 2,\n  \"consultorioId\": 1,\n  \"notas\": \"Primera limpieza del paciente.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "4 · D — Actualizaciones",
+      "description": "Los 10 PUT, el PATCH de cancelación y el cambio de contraseña.\n\nD02b restaura la contraseña del administrador: ejecútelo siempre después de D02.",
+      "item": [
+        {
+          "name": "D01 · PUT /api/usuarios/{id} → 200",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"D01 responde 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/usuarios/{{usuarioDemoId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "usuarios",
+                "{{usuarioDemoId}}"
+              ]
+            },
+            "description": "El PUT de usuario NO admite contraseña: cambiarla tiene su propio endpoint (D02). Compare con C01.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombreCompleto\": \"Recepcionista Principal de Demostración\",\n  \"correo\": \"recepcion.demo@consultoriodental.com\",\n  \"rol\": \"Recepcionista\",\n  \"activo\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "D02 · POST /api/usuarios/cambiar-password → 200",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"D02 responde 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/usuarios/cambiar-password",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "usuarios",
+                "cambiar-password"
+              ]
+            },
+            "description": "El usuario se toma del token: nadie puede cambiar la contraseña de otro por esta vía.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"passwordActual\": \"Admin123*\",\n  \"passwordNuevo\": \"Admin456*\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "D02b · Restaurar contraseña del admin → 200",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"D02b responde 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/usuarios/cambiar-password",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "usuarios",
+                "cambiar-password"
+              ]
+            },
+            "description": "Devuelve la clave a Admin123* para no romper el resto de la sesión. Captura opcional.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"passwordActual\": \"Admin456*\",\n  \"passwordNuevo\": \"Admin123*\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "D03 · PUT /api/pacientes/{id} → 200",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"D03 responde 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/pacientes/{{pacienteDemoId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "pacientes",
+                "{{pacienteDemoId}}"
+              ]
+            },
+            "description": "Cambian teléfono, dirección y alergias; totalCitas ya refleja la cita creada en C09.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Pedro\",\n  \"apellido\": \"Martínez\",\n  \"documento\": \"402-1111111-1\",\n  \"fechaNacimiento\": \"1992-04-18\",\n  \"telefono\": \"829-555-9900\",\n  \"correo\": \"pedro.martinez@correo.com\",\n  \"direccion\": \"Av. Winston Churchill 105, Santo Domingo\",\n  \"alergias\": \"Alergia a la lidocaína\",\n  \"activo\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "D04 · PUT /api/dentistas/{id} → 200",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"D04 responde 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/dentistas/{{dentistaDemoId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dentistas",
+                "{{dentistaDemoId}}"
+              ]
+            },
+            "description": "Actualización con revalidación de licencia y correo únicos.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Gabriel\",\n  \"apellido\": \"Núñez\",\n  \"numeroLicencia\": \"EXQ-40777\",\n  \"correo\": \"gabriel.nunez@consultoriodental.com\",\n  \"telefono\": \"809-555-9104\",\n  \"especialidadId\": \"{{especialidadDemoId}}\",\n  \"activo\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "D05 · PUT /api/especialidades/{id} → 200",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"D05 responde 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/especialidades/{{especialidadDemoId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "especialidades",
+                "{{especialidadDemoId}}"
+              ]
+            },
+            "description": "Actualización de catálogo.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Odontología Estética\",\n  \"descripcion\": \"Blanqueamiento, carillas, resinas estéticas y diseño de sonrisa.\",\n  \"activa\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "D06 · PUT /api/horarios-dentista/{id} → 200",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"D06 responde 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/horarios-dentista/{{horarioDemoId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "horarios-dentista",
+                "{{horarioDemoId}}"
+              ]
+            },
+            "description": "minutosDisponibles pasa de 240 a 360: el recálculo es automático.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"dentistaId\": \"{{dentistaDemoId}}\",\n  \"diaSemana\": 2,\n  \"horaInicio\": \"08:00:00\",\n  \"horaFin\": \"14:00:00\",\n  \"observacion\": \"Jornada de martes ampliada\",\n  \"activo\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "D07 · PUT /api/motivos/{id} → 200",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"D07 responde 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/motivos/{{motivoDemoId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "motivos",
+                "{{motivoDemoId}}"
+              ]
+            },
+            "description": "prioridadNombre cambia de \"Baja\" a \"Media\".",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Blanqueamiento dental\",\n  \"descripcion\": \"Solicitud de aclaramiento del color dental.\",\n  \"prioridad\": 2,\n  \"activo\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "D08 · PUT /api/servicios/{id} → 200",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"D08 responde 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/servicios/{{servicioDemoId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "servicios",
+                "{{servicioDemoId}}"
+              ]
+            },
+            "description": "Cambian precio y duración sugerida.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Blanqueamiento en consultorio\",\n  \"descripcion\": \"Sesión de blanqueamiento con lámpara LED. Incluye control a los 15 días.\",\n  \"precio\": 8200,\n  \"duracionMinutos\": 75,\n  \"activo\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "D09 · PUT /api/consultorios/{id} → 200",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"D09 responde 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/consultorios/{{consultorioDemoId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "consultorios",
+                "{{consultorioDemoId}}"
+              ]
+            },
+            "description": "Actualización de sala.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"codigo\": \"C-04\",\n  \"nombre\": \"Consultorio 4 - Estética\",\n  \"ubicacion\": \"Segundo nivel, ala este\",\n  \"capacidad\": 2,\n  \"activo\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "D10 · PUT /api/citas/{id} (reprogramar) → 200",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"D10 responde 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/citas/{{citaDemoId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "citas",
+                "{{citaDemoId}}"
+              ]
+            },
+            "description": "Cambian hora, duración, servicio y consultorio; costoEstimado se RECALCULA al precio del nuevo servicio (3500) y tiempoRestante se ajusta. La API repitió todas las validaciones de agenda.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"pacienteId\": {{pacienteDemoId}},\n  \"fecha\": \"{{fechaCita}}\",\n  \"hora\": \"15:00:00\",\n  \"duracionMinutos\": 60,\n  \"dentistaId\": 1,\n  \"motivoId\": 1,\n  \"servicioId\": 3,\n  \"consultorioId\": 2,\n  \"notas\": \"Reprogramada a la tarde a solicitud del paciente.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "D11 · PATCH /api/citas/3/cancelar → 200",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"D11 responde 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/citas/3/cancelar",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "citas",
+                "3",
+                "cancelar"
+              ]
+            },
+            "description": "Cancelar NO borra: la cita sigue existiendo con cancelada=true, estado \"Cancelada\" y el motivo registrado. Es una baja lógica, no física.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"motivoCancelacion\": \"El paciente notificó que viajará esa semana.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "5 · F — Validaciones y errores",
+      "description": "El bloque de mayor peso: demuestra que ninguna excepción llega sin controlar al cliente y que todos los errores conservan el mismo contrato JSON.\n\nEjecútelo DESPUÉS de D y ANTES de E: F10 y F11 dependen de que la cita de C09 siga existiendo.",
+      "item": [
+        {
+          "name": "F01 · Datos inválidos (varios campos) → 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"F01 responde 400\", function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/pacientes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "pacientes"
+              ]
+            },
+            "description": "El arreglo errores reúne TODAS las fallas en una sola respuesta (longitud mínima, campo obligatorio, formato de documento, fecha futura, teléfono, correo) en vez de detenerse en la primera. La mejor captura de las DataAnnotations.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"A\",\n  \"apellido\": \"\",\n  \"documento\": \"12*34\",\n  \"fechaNacimiento\": \"2030-01-01\",\n  \"telefono\": \"abc\",\n  \"correo\": \"esto-no-es-un-correo\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "F02 · JSON mal formado → 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"F02 responde 400\", function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/pacientes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "pacientes"
+              ]
+            },
+            "description": "\"El cuerpo de la solicitud no tiene un formato JSON válido.\" El error nativo del deserializador (inglés, posiciones de bytes) se sustituye por un mensaje claro en español: no se filtra detalle técnico.",
+            "body": {
+              "mode": "raw",
+              "raw": "{ \"nombre\": \"Pedro\", \"apellido\": }",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "F03 · Tipo de dato incorrecto → 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"F03 responde 400\", function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/servicios",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "servicios"
+              ]
+            },
+            "description": "\"El campo 'precio' tiene un valor con formato incorrecto.\"",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Servicio con precio inválido\",\n  \"precio\": \"gratis\",\n  \"duracionMinutos\": 30\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "F04 · Recurso inexistente → 404",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"F04 responde 404\", function () {",
+                  "    pm.response.to.have.status(404);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/pacientes/9999",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "pacientes",
+                "9999"
+              ]
+            },
+            "description": "\"No existe un registro de paciente con el ID 9999.\""
+          },
+          "response": []
+        },
+        {
+          "name": "F05 · Documento duplicado → 409",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"F05 responde 409\", function () {",
+                  "    pm.response.to.have.status(409);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/pacientes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "pacientes"
+              ]
+            },
+            "description": "\"Ya existe un paciente registrado con el documento '001-1234567-8'.\" El índice único se valida antes de llegar a la base de datos.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Otro\",\n  \"apellido\": \"Paciente\",\n  \"documento\": \"001-1234567-8\",\n  \"fechaNacimiento\": \"1995-06-01\",\n  \"telefono\": \"809-555-0000\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "F06 · Nombre de catálogo duplicado → 409",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"F06 responde 409\", function () {",
+                  "    pm.response.to.have.status(409);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/especialidades",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "especialidades"
+              ]
+            },
+            "description": "La misma regla de unicidad se aplica de forma uniforme en todos los catálogos.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Ortodoncia\",\n  \"descripcion\": \"Intento de duplicado.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "F07 · Eliminar con dependencias → 409",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"F07 responde 409\", function () {",
+                  "    pm.response.to.have.status(409);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/pacientes/1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "pacientes",
+                "1"
+              ]
+            },
+            "description": "\"No se puede eliminar el paciente porque tiene N cita(s) registrada(s). Puede desactivarlo en su lugar.\" El error no solo rechaza: propone la alternativa correcta."
+          },
+          "response": []
+        },
+        {
+          "name": "F08 · Cita en el pasado → 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"F08 responde 400\", function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/citas",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "citas"
+              ]
+            },
+            "description": "\"No se puede agendar una cita en el pasado...\" con la fecha y hora interpretadas por la API.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"pacienteId\": 4,\n  \"fecha\": \"2020-01-15\",\n  \"hora\": \"10:00:00\",\n  \"duracionMinutos\": 30,\n  \"dentistaId\": 1,\n  \"motivoId\": 1,\n  \"servicioId\": 1,\n  \"consultorioId\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "F09 · Fuera del horario del dentista → 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"F09 responde 400\", function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/citas",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "citas"
+              ]
+            },
+            "description": "El mensaje devuelve el rango solicitado y ENUMERA los horarios disponibles del dentista para ese día (08:00-12:00, 14:00-18:00).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"pacienteId\": 4,\n  \"fecha\": \"{{fechaCita}}\",\n  \"hora\": \"07:00:00\",\n  \"duracionMinutos\": 30,\n  \"dentistaId\": 1,\n  \"motivoId\": 1,\n  \"servicioId\": 1,\n  \"consultorioId\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "F10 · Solapamiento del dentista → 409",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"F10 responde 409\", function () {",
+                  "    pm.response.to.have.status(409);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/citas",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "citas"
+              ]
+            },
+            "description": "\"El dentista ya tiene la cita #N agendada el dd/MM/yyyy de 15:00 - 16:00.\" La detección es por intersección de rangos, no por hora exacta. REQUIERE haber ejecutado D10 (movió la cita a las 15:00); si no lo ejecutó, cambie la hora a 10:15:00.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"pacienteId\": 4,\n  \"fecha\": \"{{fechaCita}}\",\n  \"hora\": \"15:15:00\",\n  \"duracionMinutos\": 30,\n  \"dentistaId\": 1,\n  \"motivoId\": 1,\n  \"servicioId\": 1,\n  \"consultorioId\": 3\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "F11 · Solapamiento del consultorio → 409",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"F11 responde 409\", function () {",
+                  "    pm.response.to.have.status(409);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/citas",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "citas"
+              ]
+            },
+            "description": "\"El consultorio 'C-02' está ocupado...\" El dentista 2 está libre: lo que bloquea es la sala. Junto con F10 demuestra que la verificación cubre dentista, consultorio y paciente. Sin D10: hora 10:15:00 y consultorioId 1.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"pacienteId\": 4,\n  \"fecha\": \"{{fechaCita}}\",\n  \"hora\": \"15:15:00\",\n  \"duracionMinutos\": 30,\n  \"dentistaId\": 2,\n  \"motivoId\": 1,\n  \"servicioId\": 1,\n  \"consultorioId\": 2\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "F12 · Modificar cita finalizada → 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"F12 responde 400\", function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/citas/1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "citas",
+                "1"
+              ]
+            },
+            "description": "\"No se puede modificar una cita en estado 'Finalizada'.\" El estado no está almacenado: se calculó en el instante de la petición para decidir el rechazo.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"pacienteId\": 1,\n  \"fecha\": \"{{fechaCita}}\",\n  \"hora\": \"09:00:00\",\n  \"duracionMinutos\": 45,\n  \"dentistaId\": 1,\n  \"motivoId\": 2,\n  \"servicioId\": 2,\n  \"consultorioId\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "F13 · Eliminar cita finalizada → 409",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"F13 responde 409\", function () {",
+                  "    pm.response.to.have.status(409);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/citas/1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "citas",
+                "1"
+              ]
+            },
+            "description": "\"...Solo pueden eliminarse citas que aún no han iniciado.\" Las citas atendidas son historial clínico. Contrasta directamente con E01, donde sí se elimina."
+          },
+          "response": []
+        },
+        {
+          "name": "F14 · Contraseña actual incorrecta → 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"F14 responde 400\", function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/usuarios/cambiar-password",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "usuarios",
+                "cambiar-password"
+              ]
+            },
+            "description": "\"La contraseña actual no es correcta.\"",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"passwordActual\": \"ClaveQueNoEs\",\n  \"passwordNuevo\": \"NuevaClave123*\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "F15 · Eliminar la propia cuenta → 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"F15 responde 400\", function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/usuarios/1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "usuarios",
+                "1"
+              ]
+            },
+            "description": "\"Un usuario no puede eliminar su propia cuenta mientras está autenticado.\" La API cruza el ID de la ruta con el claim del token."
+          },
+          "response": []
+        },
+        {
+          "name": "F16 · Rango de fechas inválido → 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"F16 responde 400\", function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/citas?fechaDesde=2026-12-31&fechaHasta=2026-01-01",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "citas"
+              ],
+              "query": [
+                {
+                  "key": "fechaDesde",
+                  "value": "2026-12-31"
+                },
+                {
+                  "key": "fechaHasta",
+                  "value": "2026-01-01"
+                }
+              ]
+            },
+            "description": "Los parámetros de consulta también se validan: \"La fecha inicial del filtro no puede ser posterior a la fecha final.\""
+          },
+          "response": []
+        },
+        {
+          "name": "F17 · Horarios solapados → 409",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"F17 responde 409\", function () {",
+                  "    pm.response.to.have.status(409);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/horarios-dentista",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "horarios-dentista"
+              ]
+            },
+            "description": "\"El horario se solapa con otro bloque del mismo dentista el Lunes (08:00 - 12:00).\"",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"dentistaId\": 1,\n  \"diaSemana\": 1,\n  \"horaInicio\": \"11:00:00\",\n  \"horaFin\": \"15:00:00\",\n  \"observacion\": \"Bloque que se solapa\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "6 · E — Eliminaciones",
+      "description": "Los 9 DELETE, en el único orden que la API permite: primero la cita, luego el horario, después el dentista y por último su especialidad.\n\nEjecútelo AL FINAL de todo.",
+      "item": [
+        {
+          "name": "E01 · DELETE /api/citas/{id} → 200",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"E01 responde 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/citas/{{citaDemoId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "citas",
+                "{{citaDemoId}}"
+              ]
+            },
+            "description": "Solo se eliminan citas que no han iniciado. Respuesta { exito, mensaje } sin datos."
+          },
+          "response": []
+        },
+        {
+          "name": "E02 · DELETE /api/horarios-dentista/{id} → 200",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"E02 responde 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/horarios-dentista/{{horarioDemoId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "horarios-dentista",
+                "{{horarioDemoId}}"
+              ]
+            },
+            "description": "Permitido porque el bloque no tiene citas futuras dentro."
+          },
+          "response": []
+        },
+        {
+          "name": "E03 · DELETE /api/dentistas/{id} → 200",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"E03 responde 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/dentistas/{{dentistaDemoId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dentistas",
+                "{{dentistaDemoId}}"
+              ]
+            },
+            "description": "Dentista sin citas registradas."
+          },
+          "response": []
+        },
+        {
+          "name": "E04 · DELETE /api/especialidades/{id} → 200",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"E04 responde 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/especialidades/{{especialidadDemoId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "especialidades",
+                "{{especialidadDemoId}}"
+              ]
+            },
+            "description": "Posible solo después de E03: ya no tiene dentistas asignados."
+          },
+          "response": []
+        },
+        {
+          "name": "E05 · DELETE /api/pacientes/{id} → 200",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"E05 responde 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/pacientes/{{pacienteDemoId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "pacientes",
+                "{{pacienteDemoId}}"
+              ]
+            },
+            "description": "Posible solo después de E01: el paciente quedó sin citas."
+          },
+          "response": []
+        },
+        {
+          "name": "E05b · Verificar que ya no existe → 404",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"E05b responde 404\", function () {",
+                  "    pm.response.to.have.status(404);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/pacientes/{{pacienteDemoId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "pacientes",
+                "{{pacienteDemoId}}"
+              ]
+            },
+            "description": "Prueba de que la eliminación fue efectiva y no solo un mensaje de éxito. Póngala junto a E05 en el informe."
+          },
+          "response": []
+        },
+        {
+          "name": "E06 · DELETE /api/motivos/{id} → 200",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"E06 responde 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/motivos/{{motivoDemoId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "motivos",
+                "{{motivoDemoId}}"
+              ]
+            },
+            "description": "Catálogo sin citas asociadas."
+          },
+          "response": []
+        },
+        {
+          "name": "E07 · DELETE /api/servicios/{id} → 200",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"E07 responde 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/servicios/{{servicioDemoId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "servicios",
+                "{{servicioDemoId}}"
+              ]
+            },
+            "description": "Catálogo sin citas asociadas."
+          },
+          "response": []
+        },
+        {
+          "name": "E08 · DELETE /api/consultorios/{id} → 200",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"E08 responde 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/consultorios/{{consultorioDemoId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "consultorios",
+                "{{consultorioDemoId}}"
+              ]
+            },
+            "description": "Catálogo sin citas asociadas."
+          },
+          "response": []
+        },
+        {
+          "name": "E09 · DELETE /api/usuarios/{id} → 200",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"E09 responde 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/usuarios/{{usuarioDemoId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "usuarios",
+                "{{usuarioDemoId}}"
+              ]
+            },
+            "description": "Requiere rol Administrador: use el token de admin, no el de recepción."
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}
